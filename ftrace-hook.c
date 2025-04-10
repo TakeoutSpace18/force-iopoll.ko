@@ -2,6 +2,9 @@
  * https://habr.com/ru/articles/413241/
  *
  * */
+
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/module.h> /* Needed by all modules */
 #include <linux/kernel.h> /* Needed for KERN_INFO */
 #include <linux/ftrace.h>
@@ -58,7 +61,7 @@ int fh_install_hook(struct ftrace_hook *hook)
 	if (err) {
 		pr_info("register_ftrace_function() failed: %d\n", err);
 
-		/* Не забываем выключить ftrace в случае ошибки. */
+		/* Don't forget to disable ftrace in case of error */
 		ftrace_set_filter_ip(&hook->ops, hook->address, 1, 0);
 
 		return err;

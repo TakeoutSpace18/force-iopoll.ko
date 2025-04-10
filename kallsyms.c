@@ -1,6 +1,8 @@
-#include <linux/kprobes.h>
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include "kallsyms.h"
+
+#include <linux/kprobes.h>
 
 long unsigned int (*__kallsyms_lookup_name)(const char *name);
 int (*__lookup_symbol_name)(unsigned long addr, char *symname);
