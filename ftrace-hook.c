@@ -1,22 +1,26 @@
 /*
+ * Intercept functions in Linux kernel with FTrace
  * https://habr.com/ru/articles/413241/
- *
  * */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/module.h> /* Needed by all modules */
-#include <linux/kernel.h> /* Needed for KERN_INFO */
-#include <linux/ftrace.h>
-#include <linux/kprobes.h>
-
 #include "ftrace-hook.h"
-#include "kallsyms.h"
 
-MODULE_LICENSE("GPL");
+#include <linux/ftrace.h>
+
+#include "util.h"
 
 static int resolve_hook_address(struct ftrace_hook *hook)
 {
+    static long unsigned int (*__kallsyms_lookup_name)(const char *name) = NULL;
+
+    /* kallsyms_lookup_name is not exported to kernel modules,
+     * so use a hack to find it via kprobe */
+    if (!__kallsyms_lookup_name) {
+        __kallsyms_lookup_name = (void *) kprobe_lookup("kallsyms_lookup_name");
+    }
+
 	hook->address = __kallsyms_lookup_name(hook->name);
 
 	if (!hook->address) {
@@ -25,7 +29,7 @@ static int resolve_hook_address(struct ftrace_hook *hook)
 	}
 
 	*((unsigned long *)hook->original) = hook->address;
-	pr_info("resolved %s: %lx\n", hook->name, hook->address);
+	pr_info("resolved %s\n", hook->name);
 
 	return 0;
 }

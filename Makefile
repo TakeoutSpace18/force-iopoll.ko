@@ -1,9 +1,7 @@
 obj-m += force-iopoll.o
-force-iopoll-objs := main.o ftrace-hook.o kallsyms.o config.o
+force-iopoll-objs := main.o ftrace-hook.o util.o config.o
 
 KERNEL=`uname -r`
-#KERNEL=6.8.0
-# KERNEL=6.8.0-dirty
 
 all: module
 

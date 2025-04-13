@@ -12,10 +12,11 @@
 #include <linux/pid.h>
 
 DEFINE_HASHTABLE(config_hashtable, 8);
+DEFINE_RWLOCK(config_hashtable_lock);
 
 static struct proc_dir_entry *proc_file;
 
-static int enable_polling_for_pid(pid_t pid, unsigned long flags)
+int config_enable_iopoll(pid_t pid, unsigned long flags)
 {
     /* TODO: collisions can happen if there are equal PIDs
      * in different namespaces */
@@ -34,6 +35,12 @@ static int enable_polling_for_pid(pid_t pid, unsigned long flags)
             flags & FLAG_CLONE_INHERIT ? "yes" : "no", task->comm);
 
     put_task_struct(task);
+    return 0;
+}
+
+int config_disable_iopoll(pid_t pid)
+{
+    config_hashtable_remove(pid);
     return 0;
 }
 
@@ -101,7 +108,7 @@ static void parse_config_line(char *line)
     if (flags_str)
         flags = parse_flags(flags_str);
 
-    enable_polling_for_pid(pid, flags);
+    config_enable_iopoll(pid, flags);
 }
 
 static void parse_config(char *buffer, size_t count)
@@ -128,7 +135,6 @@ static const char *flag_names[] = {
     "clone_inherit"
 };
 
-// Show the current configuration
 static int proc_show(struct seq_file *f, void *v)
 {
     struct pid_config *entry;
@@ -206,6 +212,7 @@ static const struct proc_ops config_fops = {
 int config_init(void)
 {
     hash_init(config_hashtable);
+    rwlock_init(&config_hashtable_lock);
     
     proc_file = proc_create(PROCFS_NAME, 0644, NULL, &config_fops);
     if (!proc_file) {
@@ -221,6 +228,6 @@ void config_exit(void)
 {
     proc_remove(proc_file);
     pr_info("removed /proc/%s\n", PROCFS_NAME);
-    
+
     config_hashtable_clear();
 }

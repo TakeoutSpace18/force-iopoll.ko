@@ -9,6 +9,7 @@
 #define MAX_PROC_SIZE 4096
 
 extern DECLARE_HASHTABLE(config_hashtable, 8);
+extern rwlock_t config_hashtable_lock;
 
 struct pid_config {
     int pid;
@@ -26,6 +27,9 @@ enum flag_bits {
 int config_init(void);
 void config_exit(void);
 
+int config_enable_iopoll(pid_t pid, unsigned long flags);
+int config_disable_iopoll(pid_t pid);
+
 static inline struct pid_config *config_hashtable_find(pid_t pid)
 {
     struct pid_config *entry;
@@ -41,7 +45,9 @@ static inline struct pid_config *config_hashtable_find(pid_t pid)
 
 static inline void config_hashtable_add_or_update(pid_t pid, unsigned long flags)
 {
+    write_lock(&config_hashtable_lock);
     struct pid_config *entry = config_hashtable_find(pid);
+
     if (entry) {
         entry->flags = flags;
     }
@@ -55,6 +61,8 @@ static inline void config_hashtable_add_or_update(pid_t pid, unsigned long flags
         entry->flags = flags;
         hash_add(config_hashtable, &entry->node, pid);
     }
+
+    write_unlock(&config_hashtable_lock);
 }
 
 static inline void config_hashtable_clear(void)
@@ -63,23 +71,50 @@ static inline void config_hashtable_clear(void)
     struct hlist_node *tmp;
     int i;
 
+    write_lock(&config_hashtable_lock);
+
     hash_for_each_safe(config_hashtable, i, tmp, entry, node) {
         hash_del(&entry->node);
         kfree(entry);
     }
+
+    write_unlock(&config_hashtable_lock);
 }
 
-static inline bool config_iopoll_enabled(pid_t pid)
-{
-    /* poll pid if it is present in config */
-    return config_hashtable_find(pid);
-}
-
-static inline unsigned long config_pid_flags(pid_t pid)
+static inline void config_hashtable_remove(pid_t pid)
 {
     struct pid_config *entry;
+    struct hlist_node *tmp;
+
+    write_lock(&config_hashtable_lock);
+
+    hash_for_each_possible_safe(config_hashtable, entry, tmp, node, pid) {
+        if (entry->pid == pid) {
+            hash_del(&entry->node);
+            kfree(entry);
+            break;
+        }
+    }
+
+    write_unlock(&config_hashtable_lock);
+}
+
+static inline bool config_iopoll_enabled(pid_t pid, unsigned long *flags)
+{
+    struct pid_config *entry;
+
+    read_lock(&config_hashtable_lock);
     entry = config_hashtable_find(pid);
 
-    return entry ? entry->flags : 0;
+    if (entry) {
+        if (flags)
+            *flags = entry->flags;
+        read_unlock(&config_hashtable_lock);
+        return true;
+    }
+
+    read_unlock(&config_hashtable_lock);
+    return false;
 }
+
 #endif // !CONFIG_H

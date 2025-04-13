@@ -3,28 +3,20 @@
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/kprobes.h>
-#include <linux/utsname.h>
 #include <linux/bio.h>
 #include <linux/blkdev.h>
-#include <linux/proc_fs.h>
-#include <linux/fs.h>
-#include <linux/types.h>
-#include <linux/notifier.h>
-#include <linux/ftrace.h>
-#include <linux/hashtable.h>
-#include <linux/delay.h>
 
 #include "ftrace-hook.h"
-#include "kallsyms.h"
 #include "config.h"
 #include "util.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Pavel Urdin");
-MODULE_DESCRIPTION("A module to enable sync polling I/O path on nvme devices");
+MODULE_DESCRIPTION("A module to enable sync polled I/O path on nvme devices");
 MODULE_VERSION("0.1");
 
+/* disable tail call optimization to avoid bug in ftrace hooked function
+ * (see the end of https://habr.com/ru/articles/413241/) */
 #pragma GCC optimize("-fno-optimize-sibling-calls")
 
 /* A pointer to original function. Is initialized inside fh_install_hook. */
@@ -93,7 +85,7 @@ static void submit_bio_poll(struct bio *bio)
 
 static asmlinkage void fh_submit_bio(struct bio *bio)
 {
-    if (!config_iopoll_enabled(current->pid)) {
+    if (!config_iopoll_enabled(current->pid, NULL)) {
         return orig_submit_bio(bio);
     }
 
@@ -136,12 +128,34 @@ static asmlinkage void fh_submit_bio(struct bio *bio)
 struct ftrace_hook submit_bio_hook =
     HOOK("submit_bio", fh_submit_bio, &orig_submit_bio);
 
+static struct tracepoint *tp_sched_process_fork;
+static struct tracepoint *tp_sched_process_exit;
+
+static void sched_process_fork_probe(void *data, struct task_struct *parent,
+                                     struct task_struct *child)
+{
+    unsigned long flags;
+    if (config_iopoll_enabled(parent->pid, &flags) && (flags & FLAG_CLONE_INHERIT)) {
+        config_enable_iopoll(child->pid, FLAG_CLONE_INHERIT);
+    }
+}
+
+static void sched_process_exit_probe(void *data, struct task_struct *task)
+{
+    config_disable_iopoll(task->pid);
+}
+
 static int __init force_iopoll_init(void)
 {
     pr_info("loading module...\n");
     config_init();
 
-    lookup_kallsyms_lookup_name();
+    /* register probes needed for FLAG_CLONE_INHERIT */
+    tp_sched_process_fork = find_tracepoint("sched_process_fork");
+    tracepoint_probe_register(tp_sched_process_fork, sched_process_fork_probe, NULL);
+
+    tp_sched_process_exit = find_tracepoint("sched_process_exit");
+    tracepoint_probe_register(tp_sched_process_exit, sched_process_exit_probe, NULL);
 
 	fh_install_hook(&submit_bio_hook);
 
@@ -153,6 +167,9 @@ static void __exit force_iopoll_exit(void)
     pr_info("unloading module...\n");
 	if (fh_installed(&submit_bio_hook))
 	    fh_remove_hook(&submit_bio_hook);
+
+    tracepoint_probe_unregister(tp_sched_process_fork, sched_process_fork_probe, NULL);
+    tracepoint_probe_unregister(tp_sched_process_exit, sched_process_exit_probe, NULL);
 
     config_exit();
 }

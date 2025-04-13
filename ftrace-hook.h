@@ -1,25 +1,27 @@
 /*
+ * Intercept functions in Linux kernel with FTrace
  * https://habr.com/ru/articles/413241/
- *
  * */
 #ifndef FTRACE_HOOK_H
 #define FTRACE_HOOK_H
 
+#include <linux/ftrace.h>
+
 /**
- * struct ftrace_hook - описывает перехватываемую функцию
+ * struct ftrace_hook - describes intercepted function
  *
- * @name:       имя перехватываемой функции
+ * @name:       name of intercepted function
  *
- * @function:   адрес функции-обёртки, которая будет вызываться вместо
- *              перехваченной функции
+ * @function:   address of a function which will be called
+ *              instead of original
  *
- * @original:   указатель на место, куда следует записать адрес
- *              перехватываемой функции, заполняется при установке
+ * @original:   a pointer to a place where to write intercepted
+ *              function address (is determined at hook installation)
  *
- * @address:    адрес перехватываемой функции, выясняется при установке
+ * @address:    intercepted function address (is determined at hook installation)
  *
- * @ops:        служебная информация ftrace, инициализируется нулями,
- *              при установке перехвата будет доинициализирована
+ * @ops:        ftrace internal data, is initialized with zeros
+ *  
  */
 struct ftrace_hook {
 	const char *name;
@@ -32,11 +34,12 @@ struct ftrace_hook {
 	bool installed;
 };
 
-#define HOOK(_name, _function, _original)     \
-{                                             \
-    .name = (_name), .function = (_function), \
-    .original = (_original),                  \
-}
+#define HOOK(_name, _function, _original) \
+	{                                     \
+		.name = (_name),                  \
+		.function = (_function),          \
+		.original = (_original),          \
+	}
 
 int fh_install_hook(struct ftrace_hook *hook);
 void fh_remove_hook(struct ftrace_hook *hook);
