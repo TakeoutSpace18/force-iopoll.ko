@@ -31,8 +31,8 @@ int config_enable_iopoll(pid_t pid, unsigned long flags)
     }
 
     config_hashtable_add_or_update(pid, flags);
-    pr_info("enabled polling for pid %i (clone_inherit=%s) [%s]\n", pid, 
-            flags & FLAG_CLONE_INHERIT ? "yes" : "no", task->comm);
+    pr_info("enabled polling for pid %i (follow_forks=%s) [%s]\n", pid, 
+            flags & FLAG_FOLLOW_FORKS ? "yes" : "no", task->comm);
 
     put_task_struct(task);
     return 0;
@@ -47,7 +47,7 @@ int config_disable_iopoll(pid_t pid)
 static unsigned long parse_flags(char *flags_str)
 {
     static const match_table_t flag_tokens = {
-        {FLAG_CLONE_INHERIT, "clone_inherit"},
+        {FLAG_FOLLOW_FORKS, "follow_forks"},
         {-1, NULL}
     };
 
@@ -132,7 +132,7 @@ static void parse_config(char *buffer, size_t count)
 }
 
 static const char *flag_names[] = {
-    "clone_inherit"
+    "follow_forks"
 };
 
 static int proc_show(struct seq_file *f, void *v)
@@ -141,9 +141,9 @@ static int proc_show(struct seq_file *f, void *v)
     int i;
 
     seq_printf(f, "# %s configuration\n", KBUILD_MODNAME);
-    seq_puts(f, "# Format: <pid> [flags=flag1,flag2,...]\n\n");
+    seq_puts(f, "# Format: <pid> [flags=follow_forks\n");
     seq_puts(f, "# Flags:\n");
-    seq_puts(f, "# \tclone_inherit - poll children of process with iopoll enabled\n");
+    seq_puts(f, "# \tfollow_forks - enable polling for forked processes\n");
     seq_puts(f, "\n");
 
     hash_for_each(config_hashtable, i, entry, node) {

@@ -18,11 +18,11 @@ struct pid_config {
 };
 
 enum flag_bits {
-    __FLAG_CLONE_INHERIT = 0,
+    __FLAG_FOLLOW_FORKS = 0,
     __FLAG_NR_BITS
 };
 
-#define FLAG_CLONE_INHERIT (1UL << __FLAG_CLONE_INHERIT)
+#define FLAG_FOLLOW_FORKS (1UL << __FLAG_FOLLOW_FORKS)
 
 int config_init(void);
 void config_exit(void);

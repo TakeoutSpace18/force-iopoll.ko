@@ -135,8 +135,8 @@ static void sched_process_fork_probe(void *data, struct task_struct *parent,
                                      struct task_struct *child)
 {
     unsigned long flags;
-    if (config_iopoll_enabled(parent->pid, &flags) && (flags & FLAG_CLONE_INHERIT)) {
-        config_enable_iopoll(child->pid, FLAG_CLONE_INHERIT);
+    if (config_iopoll_enabled(parent->pid, &flags) && (flags & FLAG_FOLLOW_FORKS)) {
+        config_enable_iopoll(child->pid, FLAG_FOLLOW_FORKS);
     }
 }
 
@@ -150,7 +150,7 @@ static int __init force_iopoll_init(void)
     pr_info("loading module...\n");
     config_init();
 
-    /* register probes needed for FLAG_CLONE_INHERIT */
+    /* register probes needed for FLAG_FOLLOW_FORKS */
     tp_sched_process_fork = find_tracepoint("sched_process_fork");
     tracepoint_probe_register(tp_sched_process_fork, sched_process_fork_probe, NULL);
 
