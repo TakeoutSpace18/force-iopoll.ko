@@ -55,6 +55,7 @@ static inline void config_hashtable_add_or_update(pid_t pid, unsigned long flags
         entry = kmalloc(sizeof(*entry), GFP_KERNEL);
         if (!entry) {
             pr_err("failed to allocate memory for PID entry\n");
+            write_unlock(&config_hashtable_lock);
             return;
         }
         entry->pid = pid;

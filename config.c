@@ -141,7 +141,7 @@ static int proc_show(struct seq_file *f, void *v)
     int i;
 
     seq_printf(f, "# %s configuration\n", KBUILD_MODNAME);
-    seq_puts(f, "# Format: <pid> [flags=follow_forks\n");
+    seq_puts(f, "# Format: <pid> [flags=follow_forks]\n");
     seq_puts(f, "# Flags:\n");
     seq_puts(f, "# \tfollow_forks - enable polling for forked processes\n");
     seq_puts(f, "\n");

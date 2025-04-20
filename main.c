@@ -12,7 +12,7 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Pavel Urdin");
-MODULE_DESCRIPTION("A module to enable sync polled I/O path on nvme devices");
+MODULE_DESCRIPTION("A module to enable polled I/O path on nvme devices");
 MODULE_VERSION("0.1");
 
 /* disable tail call optimization to avoid bug in ftrace hooked function
@@ -117,6 +117,7 @@ static asmlinkage void fh_submit_bio(struct bio *bio)
         return orig_submit_bio(bio);
     }
 
+    /* TODO: remove ?*/
     if (bio_is_empty(bio)) {
         pr_warn_ratelimited("bio empty, don't inject REQ_POLLED\n");
         return orig_submit_bio(bio);
@@ -142,7 +143,10 @@ static void sched_process_fork_probe(void *data, struct task_struct *parent,
 
 static void sched_process_exit_probe(void *data, struct task_struct *task)
 {
-    config_disable_iopoll(task->pid);
+    if (config_iopoll_enabled(task->pid, NULL)) {
+        config_disable_iopoll(task->pid);
+        pr_info("disabled polling for pid %i, process exited [%s]\n", task->pid, task->comm);
+    }
 }
 
 static int __init force_iopoll_init(void)
