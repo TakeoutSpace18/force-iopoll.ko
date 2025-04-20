@@ -8,6 +8,10 @@ This module enables polled I/O path for every NVMe SSD read for given process. I
 
 **Note:** module is not thoroughly tested, so stable work is not guaranteed.
 
+### Add poll queues to NVMe driver
+
+In order for polling to work, you should set nvme.poll_queues driver parameter before the disks are attached. You can do it by inserting `nvme.poll_queues=n` to kernel command line, where `n` is the number of queues you want. 
+
 ### Configuration
 Module is configured through `/proc/force_iopoll_config`file.\
 **Note:** Don't edit with vim, cause it fails with fsync error. Use echo.
