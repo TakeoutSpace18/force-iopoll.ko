@@ -5,30 +5,19 @@
 #include <linux/hashtable.h>
 #include <linux/slab.h>
 
-#define PROCFS_NAME "force_iopoll_config"
+#define PROCFS_NAME "force_iopoll"
 #define MAX_PROC_SIZE 4096
 
 extern DECLARE_HASHTABLE(config_hashtable, 8);
-extern rwlock_t config_hashtable_lock;
+extern rwlock_t config_lock;
+extern bool config_iopoll_global;
+extern int config_iopoll_global_flags;
 
 struct pid_config {
     int pid;
-    unsigned long flags;
+    int flags;
     struct hlist_node node;
 };
-
-enum flag_bits {
-    __FLAG_FOLLOW_FORKS = 0,
-    __FLAG_NR_BITS
-};
-
-#define FLAG_FOLLOW_FORKS (1UL << __FLAG_FOLLOW_FORKS)
-
-int config_init(void);
-void config_exit(void);
-
-int config_enable_iopoll(pid_t pid, unsigned long flags);
-int config_disable_iopoll(pid_t pid);
 
 static inline struct pid_config *config_hashtable_find(pid_t pid)
 {
@@ -43,9 +32,9 @@ static inline struct pid_config *config_hashtable_find(pid_t pid)
     return NULL;
 }
 
-static inline void config_hashtable_add_or_update(pid_t pid, unsigned long flags)
+static inline void config_hashtable_add_or_update(pid_t pid, int flags)
 {
-    write_lock(&config_hashtable_lock);
+    write_lock(&config_lock);
     struct pid_config *entry = config_hashtable_find(pid);
 
     if (entry) {
@@ -55,7 +44,7 @@ static inline void config_hashtable_add_or_update(pid_t pid, unsigned long flags
         entry = kmalloc(sizeof(*entry), GFP_KERNEL);
         if (!entry) {
             pr_err("failed to allocate memory for PID entry\n");
-            write_unlock(&config_hashtable_lock);
+            write_unlock(&config_lock);
             return;
         }
         entry->pid = pid;
@@ -63,7 +52,7 @@ static inline void config_hashtable_add_or_update(pid_t pid, unsigned long flags
         hash_add(config_hashtable, &entry->node, pid);
     }
 
-    write_unlock(&config_hashtable_lock);
+    write_unlock(&config_lock);
 }
 
 static inline void config_hashtable_clear(void)
@@ -72,14 +61,14 @@ static inline void config_hashtable_clear(void)
     struct hlist_node *tmp;
     int i;
 
-    write_lock(&config_hashtable_lock);
+    write_lock(&config_lock);
 
     hash_for_each_safe(config_hashtable, i, tmp, entry, node) {
         hash_del(&entry->node);
         kfree(entry);
     }
 
-    write_unlock(&config_hashtable_lock);
+    write_unlock(&config_lock);
 }
 
 static inline void config_hashtable_remove(pid_t pid)
@@ -87,7 +76,7 @@ static inline void config_hashtable_remove(pid_t pid)
     struct pid_config *entry;
     struct hlist_node *tmp;
 
-    write_lock(&config_hashtable_lock);
+    write_lock(&config_lock);
 
     hash_for_each_possible_safe(config_hashtable, entry, tmp, node, pid) {
         if (entry->pid == pid) {
@@ -97,24 +86,46 @@ static inline void config_hashtable_remove(pid_t pid)
         }
     }
 
-    write_unlock(&config_hashtable_lock);
+    write_unlock(&config_lock);
 }
 
-static inline bool config_iopoll_enabled(pid_t pid, unsigned long *flags)
+
+int config_init(void);
+void config_exit(void);
+
+int config_add_pid(pid_t pid, int flags);
+int config_remove_pid(pid_t pid);
+int config_enable_global(int flags);
+int config_disable_global(void);
+
+static inline bool config_global_iopoll_enabled(int *flags)
+{
+    bool ret;
+    read_lock(&config_lock);
+    ret = config_iopoll_global;
+    if (flags)
+        *flags = config_iopoll_global_flags;
+    read_unlock(&config_lock);
+
+    return ret;
+}
+
+static inline bool config_pid_iopoll_enabled(pid_t pid, int *flags)
 {
     struct pid_config *entry;
 
-    read_lock(&config_hashtable_lock);
+    read_lock(&config_lock);
+
     entry = config_hashtable_find(pid);
 
     if (entry) {
         if (flags)
             *flags = entry->flags;
-        read_unlock(&config_hashtable_lock);
+        read_unlock(&config_lock);
         return true;
     }
 
-    read_unlock(&config_hashtable_lock);
+    read_unlock(&config_lock);
     return false;
 }
 

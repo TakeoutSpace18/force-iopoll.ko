@@ -34,16 +34,18 @@ struct tracepoint *find_tracepoint(const char *name)
 unsigned long kprobe_lookup(const char *symbol_name)
 {
     struct kprobe kp;
-
     memset(&kp, 0, sizeof(struct kprobe));
     kp.symbol_name = symbol_name;
+
     if (register_kprobe(&kp) < 0) {
         pr_err("Failed to kprobe lookup %s\n", symbol_name);
         return 0;
     }
 
+    unsigned long addr = (unsigned long) kp.addr;
+
     unregister_kprobe(&kp);
-    return (unsigned long)kp.addr;
+    return addr;
 }
 
 void __maybe_unused print_bio_bi_opf(blk_opf_t bi_opf)

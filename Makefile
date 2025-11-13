@@ -1,16 +1,23 @@
-obj-m += force-iopoll.o
-force-iopoll-objs := main.o ftrace-hook.o util.o config.o
+all: modules force_iopoll_ctl eval
 
-KERNEL=`uname -r`
+KDIR ?= /lib/modules/`uname -r`/build
 
-all: module
+obj-y := module/
+kbuild = -C $(KDIR) M=$$PWD $@
 
-module:
-	make -C /lib/modules/$(KERNEL)/build M=$(PWD) modules
+modules:
+	$(Q)$(MAKE) $(kbuild)
 
-install:
-	cp force-iopoll.ko /lib/modules/$(KERNEL)
-	depmod -a
+.PHONY: force_iopoll_ctl
+force_iopoll_ctl:
+	make -C force_iopoll_ctl/
 
 clean:
-	make -C /lib/modules/$(KERNEL)/build M=$(PWD) clean
+	$(Q)$(MAKE) $(kbuild)
+	$(RM) modules.order
+	make -C module/ clean
+	make -C force_iopoll_ctl/ clean
+
+install:
+	make -C module/ install
+	make -C force_iopoll_ctl/ install

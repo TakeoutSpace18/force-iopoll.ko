@@ -13,20 +13,40 @@ This module enables polled I/O path for every NVMe SSD read for given process. I
 In order for polling to work, you should set nvme.poll_queues driver parameter before the disks are attached. You can do it by inserting `nvme.poll_queues=n` to kernel command line, where `n` is the number of queues you want. 
 
 ### Configuration
-Module is configured through `/proc/force_iopoll_config`file.\
-**Note:** Don't edit with vim, cause it fails with fsync error. Use echo.
-
-Example configuration:
+Module is configured through `/dev/force_iopoll` ioctl. There is a `force_iopoll_ctl` user-space utility for convenient configuration. Current configuration can be viewed in `/proc/force_iopoll`
 ```
-# force_iopoll configuration
-# Format: <pid> [flags=follow_forks]
-# Flags:
-# 	follow_forks - enable polling for forked processes
+$ force_iopoll_ctl --help
+Usage: force_iopoll_ctl add <pid> [OPTIONS]
+       force_iopoll_ctl remove <pid> [OPTIONS]
+       force_iopoll_ctl enable-global [OPTIONS]
+       force_iopoll_ctl disable-global [OPTIONS]
 
-9588 flags=follow_forks
-3881
-8621 flags=follow_forks
+Commands:
+  add <pid>             enable iopoll for process
+  remove <pid>          disable iopoll for process
+  enable-global         enable iopoll for all processes in system
+  disable-global        disable global iopoll
+
+Options (for 'add' command):
+  -f, --follow-forks    iopoll will be inherited by forked processes
+  -y, --hybrid          sleep before polling to reduce CPU usage
+
+Options (for 'enable-global' command):
+  -y, --hybrid          sleep before polling to reduce CPU usage
+
+Options (for all commands):
+  -d, --device PATH     use custom device path (default: /dev/force_iopoll)
+  -h, --help            show this help message
+
 ```
+
+#### Enable polling on system boot
+To enable polling in every process on system boot, add force_iopoll to auto-loaded modules with `iopoll_global` set to true:
+```
+echo force_iopoll | sudo tee /etc/modules-load.d/force_iopoll.conf
+echo iopoll_global=true | sudo tee /etc/modprobe.d/force_iopoll.conf
+```
+**WARNING**: It is highly experimental and succsessful boot is not guaranteed. 
 
 ### Benchmark results
 Tested on HUAWEI Matebook 14s HKFG-X, i7-13700H, 16Gb RAM.\
