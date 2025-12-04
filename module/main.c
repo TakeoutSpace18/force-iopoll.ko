@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/version.h>
 
 #include "linux/force_iopoll.h"
 #include "ftrace_hook.h"
@@ -94,7 +95,12 @@ static u64 hybrid_iopoll_delay(void)
 	kt = ktime_set(0, sleep_time);
 
 	mode = HRTIMER_MODE_REL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
 	hrtimer_setup_sleeper_on_stack(&timer, CLOCK_MONOTONIC, mode);
+#else
+    hrtimer_init_sleeper_on_stack(&timer, CLOCK_MONOTONIC, mode);
+#endif
+
 	hrtimer_set_expires(&timer.timer, kt);
 	set_current_state(TASK_INTERRUPTIBLE);
 	hrtimer_sleeper_start_expires(&timer, mode);
@@ -154,21 +160,14 @@ static void submit_bio_poll(struct bio *bio, bool hybrid)
     if (current->plug != NULL)
         blk_finish_plug(current->plug);
 
-    DEFINE_IO_COMP_BATCH(iob);
     do {
         if (hybrid) {
-            iopoll_hybrid(bio, &iob);
+            iopoll_hybrid(bio, NULL);
         } else {
-            iopoll_classic(bio, &iob);
+            iopoll_classic(bio, NULL);
         }
 
-        // examine_iob(&iob);
-        if (!rq_list_empty(&iob.req_list)) {
-            iob.complete(&iob);
-        }
     } while (!bio_ctx.done);
-
-    `pr_info_ratelimited("bio completion polled [%s]\n", current->comm);
 }
 
 static asmlinkage void submit_bio_interceptor(struct bio *bio)
@@ -184,7 +183,12 @@ static asmlinkage void submit_bio_interceptor(struct bio *bio)
     struct block_device *bdev = READ_ONCE(bio->bi_bdev);
     struct request_queue *q = bdev_get_queue(bdev);
 
+    /* poll support flag moved to queue limits since version 6.11 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
     if (unlikely(!(q->limits.features & BLK_FEAT_POLL))) {
+#else
+    if (unlikely(!test_bit(QUEUE_FLAG_POLL, &q->queue_flags))) {
+#endif
         pr_warn_ratelimited("poll attempt at non-poll queue");
         return submit_bio(bio);
     }
