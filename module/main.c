@@ -160,14 +160,13 @@ static void submit_bio_poll(struct bio *bio, bool hybrid)
     if (current->plug != NULL)
         blk_finish_plug(current->plug);
 
-    do {
+    while (!bio_ctx.done) {
         if (hybrid) {
             iopoll_hybrid(bio, NULL);
         } else {
             iopoll_classic(bio, NULL);
         }
-
-    } while (!bio_ctx.done);
+    }
 }
 
 static asmlinkage void submit_bio_interceptor(struct bio *bio)
@@ -190,6 +189,11 @@ static asmlinkage void submit_bio_interceptor(struct bio *bio)
     if (unlikely(!test_bit(QUEUE_FLAG_POLL, &q->queue_flags))) {
 #endif
         pr_warn_ratelimited("poll attempt at non-poll queue");
+        return submit_bio(bio);
+    }
+
+    // support only nvme devices
+    if (unlikely(strncmp(bdev->bd_disk->disk_name, "nvme", 4)) != 0) {
         return submit_bio(bio);
     }
 
