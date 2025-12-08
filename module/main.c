@@ -175,8 +175,8 @@ static asmlinkage void submit_bio_interceptor(struct bio *bio)
     if (!config_pid_iopoll_enabled(current->pid, &flags) && !config_global_iopoll_enabled(&flags))
         return submit_bio(bio);
 
-    /* Poll only READ operations for now. WRITE needs debugging. */
-    if (bio_op(bio) != REQ_OP_READ)
+    /* Poll only READ & WRITE operations. */
+    if (bio_op(bio) != REQ_OP_READ && bio_op(bio) != REQ_OP_WRITE)
         return submit_bio(bio);
 
     struct block_device *bdev = READ_ONCE(bio->bi_bdev);
