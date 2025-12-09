@@ -32,7 +32,6 @@ struct force_iopoll_bio_ctx
     void *orig_bi_private;
     uint64_t iopoll_start;
     atomic_t done;
-    bool was_polled_once;
 };
 
 
@@ -58,11 +57,6 @@ static void force_iopoll_endio(struct bio *bio)
 {
     struct force_iopoll_bio_ctx *ctx = bio->bi_private;
     atomic_set(&ctx->done, 1);
-
-    if (!ctx->was_polled_once) {
-        pr_alert("force_iopoll_endio called without ever polling the bio");
-        dump_stack();
-    }
 
     /* restore original bio state */
     bio_clear_polled(bio);
