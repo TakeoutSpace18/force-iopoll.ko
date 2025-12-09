@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/version.h>
+#include <linux/atomic.h>
 
 #include "linux/force_iopoll.h"
 #include "ftrace_hook.h"
@@ -30,7 +31,8 @@ struct force_iopoll_bio_ctx
     bio_end_io_t *orig_bi_end_io;
     void *orig_bi_private;
     uint64_t iopoll_start;
-    bool done;
+    atomic_t done;
+    bool was_polled_once;
 };
 
 
@@ -55,7 +57,12 @@ static void examine_iob(struct io_comp_batch *iob)
 static void force_iopoll_endio(struct bio *bio)
 {
     struct force_iopoll_bio_ctx *ctx = bio->bi_private;
-    ctx->done = true;
+    atomic_set(&ctx->done, 1);
+
+    if (!ctx->was_polled_once) {
+        pr_alert("force_iopoll_endio called without ever polling the bio");
+        dump_stack();
+    }
 
     /* restore original bio state */
     bio_clear_polled(bio);
@@ -114,9 +121,9 @@ static u64 hybrid_iopoll_delay(void)
 	return sleep_time;
 }
 
-static int iopoll_hybrid(struct bio *bio, struct io_comp_batch *iob)
+/* bio->bi_private can be set to NULL in endio handler, so pass bio_ctx here explicitly */
+static int iopoll_hybrid(struct bio *bio, struct io_comp_batch *iob, struct force_iopoll_bio_ctx *bio_ctx)
 {
-    struct force_iopoll_bio_ctx *bio_ctx = bio->bi_private;
     uint64_t runtime, sleep_time;
     int ret;
 
@@ -138,7 +145,7 @@ static void submit_bio_poll(struct bio *bio, bool hybrid)
     struct force_iopoll_bio_ctx bio_ctx = {
         .orig_bi_end_io = bio->bi_end_io,
         .orig_bi_private = bio->bi_private,
-        .done = false
+        .done = ATOMIC_INIT(0)
     };
 
     bio->bi_opf |= REQ_POLLED;
@@ -160,9 +167,9 @@ static void submit_bio_poll(struct bio *bio, bool hybrid)
     if (current->plug != NULL)
         blk_finish_plug(current->plug);
 
-    while (!bio_ctx.done) {
+    while (!atomic_read(&bio_ctx.done)) {
         if (hybrid) {
-            iopoll_hybrid(bio, NULL);
+            iopoll_hybrid(bio, NULL, &bio_ctx);
         } else {
             iopoll_classic(bio, NULL);
         }
